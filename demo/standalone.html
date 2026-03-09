@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liquid Glass Cursor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100dvh;
+      background: #050505;
+      display: grid;
+      place-items: center;
+      font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif, system-ui;
+      color: #e0e0e0;
+      padding: 2rem;
+      overflow-x: hidden;
+    }
+
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+    }
+
+    .blob-1 {
+      width: 40vmax;
+      height: 40vmax;
+      background: #333;
+      top: -15%;
+      left: -10%;
+      opacity: 0.4;
+    }
+
+    .blob-2 {
+      width: 35vmax;
+      height: 35vmax;
+      background: #222;
+      bottom: -20%;
+      right: -10%;
+      opacity: 0.3;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 540px;
+      width: 100%;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: #fff;
+    }
+
+    .tagline {
+      font-size: 1rem;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.5;
+      max-width: 380px;
+    }
+
+    .install {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 0.6rem 1rem;
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.35);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .tab:hover { color: rgba(255,255,255,0.6); }
+    .tab.active { color: #fff; background: rgba(255,255,255,0.05); }
+
+    .code-panels { position: relative; min-height: 3.5rem; }
+
+    .panel {
+      display: none;
+      margin: 0;
+      padding: 1rem 1.25rem;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #a8e6cf;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .panel.active { display: block; }
+
+    .links { display: flex; gap: 1rem; }
+
+    .links a {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      padding: 0.4rem 1rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .links a:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+
+    .note { font-size: 0.75rem; color: rgba(255,255,255,0.2); }
+
+    .credit {
+      position: fixed;
+      bottom: 12px;
+      right: 16px;
+      z-index: 10;
+      max-width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <main>
+    <h1>liquid glass cursor</h1>
+    <p class="tagline">drop-in glass cursor that refracts your page through SVG displacement.</p>
+
+    <div class="install">
+      <div class="tabs">
+        <button class="tab active" data-target="script">script tag</button>
+        <button class="tab" data-target="npm">npm</button>
+      </div>
+      <div class="code-panels">
+        <pre class="panel active" id="script"><code>&lt;script src="https://unpkg.com/liquid-glass-cursor/dist/liquid-glass-cursor.js"&gt;&lt;/script&gt;</code></pre>
+        <pre class="panel" id="npm"><code>npm i liquid-glass-cursor</code></pre>
+      </div>
+    </div>
+
+    <div class="links">
+      <a href="https://github.com/jassuwu/liquid-glass-cursor" target="_blank" rel="noopener">github</a>
+      <a href="https://www.npmjs.com/package/liquid-glass-cursor" target="_blank" rel="noopener">npm</a>
+    </div>
+
+    <p class="note">chromium only &mdash; backdrop-filter with svg url() isn't supported in firefox / safari yet.</p>
+  </main>
+
+  <div class="credit">
+    <blockquote class="twitter-tweet" data-theme="dark"><a href="https://x.com/jh3yy/status/2016253370424553508"></a></blockquote>
+    <script async src="https://platform.twitter.com/widgets.js"></script>
+  </div>
+
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector('.tab.active').classList.remove('active')
+        document.querySelector('.panel.active').classList.remove('active')
+        btn.classList.add('active')
+        document.getElementById(btn.dataset.target).classList.add('active')
+      })
+    })
+  </script>
+
+  <script>
+    /**
+     * Liquid Glass Cursor — inlined for standalone demo
+     */
+    ;(function () {
+      var DEFAULTS = {
+        size: 2, scale: -60, border: 0.2, lightness: 50, alpha: 0.9,
+        blur: 5, outputBlur: 0.5, blend: 'difference', frost: 0.05,
+        saturation: 1.2, chromatic: { r: 0, g: 4, b: 8 }, lerp: 0.15,
+      }
+
+      var CURSOR_W = 19.2
+      var CURSOR_H = 32
+      var PATH = 'M 0,0 L 0,28 L 6.4,22 L 11.2,32 L 16,30 L 11.2,20 L 19.2,20 Z'
+      var POINTS = [
+        [0, 0], [0, 28], [6.4, 22], [11.2, 32],
+        [16, 30], [11.2, 20], [19.2, 20],
+      ]
+
+      function createLiquidGlassCursor(userOpts) {
+        userOpts = userOpts || {}
+        var opts = Object.assign({}, DEFAULTS, userOpts)
+        var chroma = Object.assign({}, DEFAULTS.chromatic, userOpts.chromatic)
+        var s = opts.size
+
+        var elW = Math.ceil(CURSOR_W * s)
+        var elH = Math.ceil(CURSOR_H * s)
+
+        var uid = 'lgc-' + Math.random().toString(36).slice(2, 8)
+        var filterId = uid + '-f'
+
+        var clipPoly = POINTS
+          .map(function (p) { return ((p[0] / CURSOR_W) * 100).toFixed(2) + '% ' + ((p[1] / CURSOR_H) * 100).toFixed(2) + '%' })
+          .join(', ')
+
+        function buildMap() {
+          var bx = CURSOR_W * opts.border * 0.5
+          var by = CURSOR_H * opts.border * 0.5
+          var sc = 1 - opts.border
+
+          return 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg viewBox="0 0 ' + CURSOR_W + ' ' + CURSOR_H + '" xmlns="http://www.w3.org/2000/svg">' +
+            '<defs>' +
+            '<linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+            '<linearGradient id="b" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+            '<clipPath id="c"><path d="' + PATH + '"/></clipPath>' +
+            '</defs>' +
+            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="hsl(0 0% 50%)"/>' +
+            '<g clip-path="url(#c)">' +
+            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="url(#r)"/>' +
+            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="url(#b)" style="mix-blend-mode:' + opts.blend + '"/>' +
+            '<path d="' + PATH + '" transform="translate(' + bx + ',' + by + ') scale(' + sc + ')" fill="hsl(0 0% ' + opts.lightness + '% / ' + opts.alpha + ')" style="filter:blur(' + opts.blur + 'px)"/>' +
+            '</g></svg>')
+        }
+
+        var filterSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        filterSvg.setAttribute('width', '0')
+        filterSvg.setAttribute('height', '0')
+        filterSvg.style.cssText = 'position:absolute;pointer-events:none;'
+        filterSvg.innerHTML =
+          '<defs><filter id="' + filterId + '" color-interpolation-filters="sRGB">' +
+          '<feImage x="0" y="0" width="100%" height="100%" href="' + buildMap() + '" result="map"/>' +
+          '<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="' + (opts.scale + chroma.r) + '" result="dR"/>' +
+          '<feColorMatrix in="dR" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r"/>' +
+          '<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="' + (opts.scale + chroma.g) + '" result="dG"/>' +
+          '<feColorMatrix in="dG" type="matrix" values="0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0" result="g"/>' +
+          '<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="' + (opts.scale + chroma.b) + '" result="dB"/>' +
+          '<feColorMatrix in="dB" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0" result="b"/>' +
+          '<feBlend in="r" in2="g" mode="screen" result="rg"/>' +
+          '<feBlend in="rg" in2="b" mode="screen" result="out"/>' +
+          '<feGaussianBlur in="out" stdDeviation="' + opts.outputBlur + '"/>' +
+          '</filter></defs>'
+
+        var wrap = document.createElement('div')
+        Object.assign(wrap.style, {
+          position: 'fixed', top: '0', left: '0',
+          width: elW + 'px', height: elH + 'px',
+          pointerEvents: 'none', zIndex: '2147483647',
+          willChange: 'transform', transform: 'translate(-9999px, -9999px)',
+        })
+
+        var shadowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        shadowSvg.setAttribute('viewBox', '-2 -2 ' + (CURSOR_W + 4) + ' ' + (CURSOR_H + 4))
+        shadowSvg.setAttribute('width', '' + (elW + Math.ceil(4 * s)))
+        shadowSvg.setAttribute('height', '' + (elH + Math.ceil(4 * s)))
+        shadowSvg.style.cssText = 'position:absolute;top:' + Math.round(2 * s) + 'px;left:' + Math.round(1 * s) + 'px;pointer-events:none;overflow:visible;'
+        shadowSvg.innerHTML =
+          '<defs><filter id="' + uid + '-sh"><feGaussianBlur stdDeviation="1.8"/></filter></defs>' +
+          '<path d="' + PATH + '" fill="rgba(0,0,0,0.35)" filter="url(#' + uid + '-sh)"/>'
+
+        var glass = document.createElement('div')
+        Object.assign(glass.style, {
+          position: 'relative', width: elW + 'px', height: elH + 'px',
+          clipPath: 'polygon(' + clipPoly + ')',
+          backdropFilter: 'url(#' + filterId + ') brightness(1.05) saturate(' + opts.saturation + ')',
+          WebkitBackdropFilter: 'url(#' + filterId + ') brightness(1.05) saturate(' + opts.saturation + ')',
+          background: opts.frost > 0 ? 'hsl(0 0% 80% / ' + opts.frost + ')' : 'transparent',
+        })
+
+        var edgeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        edgeSvg.setAttribute('viewBox', '0 0 ' + CURSOR_W + ' ' + CURSOR_H)
+        edgeSvg.setAttribute('width', '' + elW)
+        edgeSvg.setAttribute('height', '' + elH)
+        edgeSvg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:visible;'
+        edgeSvg.innerHTML =
+          '<defs><linearGradient id="' + uid + '-eg" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0%" stop-color="rgba(255,255,255,0.65)"/>' +
+          '<stop offset="45%" stop-color="rgba(255,255,255,0.12)"/>' +
+          '<stop offset="100%" stop-color="rgba(255,255,255,0.35)"/>' +
+          '</linearGradient></defs>' +
+          '<path d="' + PATH + '" fill="none" stroke="url(#' + uid + '-eg)" stroke-width="0.5" stroke-linejoin="round"/>'
+
+        wrap.appendChild(shadowSvg)
+        wrap.appendChild(glass)
+        wrap.appendChild(edgeSvg)
+
+        var style = document.createElement('style')
+        style.textContent = '* { cursor: none !important; }'
+
+        document.body.appendChild(filterSvg)
+        document.body.appendChild(wrap)
+        document.head.appendChild(style)
+
+        var mx = -9999, my = -9999, cx = -9999, cy = -9999, prevCx = cx, tilt = 0, running = false
+
+        function onMove(e) {
+          mx = e.clientX; my = e.clientY
+          if (!running) { running = true; requestAnimationFrame(tick) }
+        }
+
+        function onLeave() {
+          mx = my = -9999
+          wrap.style.transform = 'translate(-9999px, -9999px)'
+          running = false
+        }
+
+        function tick() {
+          prevCx = cx
+          cx += (mx - cx) * opts.lerp
+          cy += (my - cy) * opts.lerp
+
+          var vx = cx - prevCx
+          if (Math.abs(vx) < 50) {
+            var target = Math.max(-4, Math.min(4, vx * 0.4))
+            tilt += (target - tilt) * 0.08
+          } else {
+            tilt = 0
+          }
+
+          wrap.style.transform = 'translate(' + cx + 'px, ' + cy + 'px) rotate(' + tilt.toFixed(1) + 'deg)'
+
+          if (Math.abs(mx - cx) > 0.1 || Math.abs(my - cy) > 0.1 || Math.abs(tilt) > 0.05) {
+            requestAnimationFrame(tick)
+          } else {
+            tilt = 0
+            wrap.style.transform = 'translate(' + cx + 'px, ' + cy + 'px)'
+            running = false
+          }
+        }
+
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseleave', onLeave)
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { createLiquidGlassCursor() })
+      } else {
+        createLiquidGlassCursor()
+      }
+    })()
+  </script>
+</body>
+</html>
