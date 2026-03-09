@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liquid Glass Cursor</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./demo.ts"></script>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <main>
+    <h1>liquid glass cursor</h1>
+    <p class="tagline">drop-in glass cursor that refracts your page through SVG displacement.</p>
+
+    <div class="install">
+      <div class="tabs">
+        <button class="tab active" data-target="script">script tag</button>
+        <button class="tab" data-target="npm">npm</button>
+      </div>
+      <div class="code-panels">
+        <pre class="panel active" id="script"><code>&lt;script src="https://unpkg.com/liquid-glass-cursor/dist/liquid-glass-cursor.js"&gt;&lt;/script&gt;</code></pre>
+        <pre class="panel" id="npm"><code>npm i liquid-glass-cursor</code></pre>
+      </div>
+    </div>
+
+    <div class="links">
+      <a href="https://github.com/AjayPoshak/liquid-glass-cursor" target="_blank" rel="noopener">github</a>
+      <a href="https://www.npmjs.com/package/liquid-glass-cursor" target="_blank" rel="noopener">npm</a>
+    </div>
+
+    <p class="note">chromium only &mdash; backdrop-filter with svg url() isn't supported in firefox / safari yet.</p>
+  </main>
+
+  <div class="credit">
+    <blockquote class="twitter-tweet" data-theme="dark"><a href="https://x.com/jh3yy/status/2016253370424553508"></a></blockquote>
+    <script async src="https://platform.twitter.com/widgets.js"></script>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector('.tab.active').classList.remove('active')
+        document.querySelector('.panel.active').classList.remove('active')
+        btn.classList.add('active')
+        document.getElementById(btn.dataset.target).classList.add('active')
+      })
+    })
+  </script>
+</body>
+</html>

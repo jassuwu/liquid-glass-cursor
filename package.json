@@ -1,0 +1,43 @@
+{
+  "name": "liquid-glass-cursor",
+  "version": "0.1.1",
+  "description": "Replace your cursor with a liquid glass prism that refracts page content",
+  "module": "dist/index.js",
+  "main": "dist/index.js",
+  "types": "index.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./dist/index.js",
+      "bun": "./index.ts"
+    },
+    "./script": "./dist/liquid-glass-cursor.js"
+  },
+  "scripts": {
+    "build": "bun build ./index.ts --outdir dist --format esm --minify && bun build ./index.ts --outfile dist/liquid-glass-cursor.js --format iife --minify",
+    "dev": "bun --hot demo/serve.ts"
+  },
+  "files": [
+    "dist",
+    "index.ts"
+  ],
+  "keywords": [
+    "cursor",
+    "glass",
+    "liquid",
+    "displacement",
+    "svg",
+    "refraction",
+    "prism",
+    "backdrop-filter",
+    "chromatic-aberration"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
