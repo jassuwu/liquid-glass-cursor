@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "bun build ./index.ts --outdir dist --format esm --minify && bun build ./index.ts --outfile dist/liquid-glass-cursor.js --format iife --minify",
+    "build:demo": "bun build demo/index.html --outdir demo/dist",
     "dev": "bun --hot demo/serve.ts"
   },
   "files": [
