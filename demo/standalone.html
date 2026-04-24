@@ -191,9 +191,8 @@
      */
     ;(function () {
       var DEFAULTS = {
-        size: 2, scale: -60, border: 0.2, lightness: 50, alpha: 0.9,
-        blur: 5, outputBlur: 0.5, blend: 'difference', frost: 0.05,
-        saturation: 1.2, chromatic: { r: 0, g: 4, b: 8 }, lerp: 0.15,
+        size: 2, scale: 30, border: 0.3, outputBlur: 0.4, frost: 0.06,
+        saturation: 1.2, chromatic: { r: 0, g: 2, b: 4 }, lerp: 0.15,
       }
 
       var CURSOR_W = 19.2
@@ -220,33 +219,102 @@
           .map(function (p) { return ((p[0] / CURSOR_W) * 100).toFixed(2) + '% ' + ((p[1] / CURSOR_H) * 100).toFixed(2) + '%' })
           .join(', ')
 
+        // Shape-aware displacement map (outward normal × bevel profile)
         function buildMap() {
-          var bx = CURSOR_W * opts.border * 0.5
-          var by = CURSOR_H * opts.border * 0.5
-          var sc = 1 - opts.border
+          var RES = 4
+          var w = Math.ceil(CURSOR_W * RES)
+          var h = Math.ceil(CURSOR_H * RES)
+          var bevel = opts.border * Math.min(CURSOR_W, CURSOR_H)
 
-          return 'data:image/svg+xml,' + encodeURIComponent(
-            '<svg viewBox="0 0 ' + CURSOR_W + ' ' + CURSOR_H + '" xmlns="http://www.w3.org/2000/svg">' +
-            '<defs>' +
-            '<linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
-            '<linearGradient id="b" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
-            '<clipPath id="c"><path d="' + PATH + '"/></clipPath>' +
-            '</defs>' +
-            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="hsl(0 0% 50%)"/>' +
-            '<g clip-path="url(#c)">' +
-            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="url(#r)"/>' +
-            '<rect width="' + CURSOR_W + '" height="' + CURSOR_H + '" fill="url(#b)" style="mix-blend-mode:' + opts.blend + '"/>' +
-            '<path d="' + PATH + '" transform="translate(' + bx + ',' + by + ') scale(' + sc + ')" fill="hsl(0 0% ' + opts.lightness + '% / ' + opts.alpha + ')" style="filter:blur(' + opts.blur + 'px)"/>' +
-            '</g></svg>')
+          var canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          var ctx = canvas.getContext('2d')
+          var img = ctx.createImageData(w, h)
+          var data = img.data
+
+          var segs = []
+          for (var si = 0; si < POINTS.length; si++) {
+            var pa = POINTS[si]
+            var pb = POINTS[(si + 1) % POINTS.length]
+            var sdx = pb[0] - pa[0]
+            var sdy = pb[1] - pa[1]
+            segs.push([pa[0], pa[1], sdx, sdy, sdx * sdx + sdy * sdy])
+          }
+
+          for (var yy = 0; yy < h; yy++) {
+            var py = (yy + 0.5) / RES
+            for (var xx = 0; xx < w; xx++) {
+              var px = (xx + 0.5) / RES
+              var i = (yy * w + xx) * 4
+
+              var inside = false
+              for (var j = 0, k = POINTS.length - 1; j < POINTS.length; k = j++) {
+                var xj = POINTS[j][0], yj = POINTS[j][1]
+                var xk = POINTS[k][0], yk = POINTS[k][1]
+                if ((yj > py) !== (yk > py) &&
+                    px < ((xk - xj) * (py - yj)) / (yk - yj) + xj) {
+                  inside = !inside
+                }
+              }
+
+              var R = 128, B = 128
+
+              if (inside) {
+                var minDistSq = Infinity
+                var ncx = 0, ncy = 0
+                for (var idx = 0; idx < segs.length; idx++) {
+                  var ax = segs[idx][0], ay = segs[idx][1]
+                  var ssdx = segs[idx][2], ssdy = segs[idx][3], l2 = segs[idx][4]
+                  var t = ((px - ax) * ssdx + (py - ay) * ssdy) / l2
+                  if (t < 0) t = 0
+                  else if (t > 1) t = 1
+                  var cxx = ax + t * ssdx
+                  var cyy = ay + t * ssdy
+                  var qx = px - cxx
+                  var qy = py - cyy
+                  var dsq = qx * qx + qy * qy
+                  if (dsq < minDistSq) {
+                    minDistSq = dsq
+                    ncx = cxx
+                    ncy = cyy
+                  }
+                }
+                var d = Math.sqrt(minDistSq)
+
+                if (d < bevel && d > 1e-6) {
+                  var ox = (ncx - px) / d
+                  var oy = (ncy - py) / d
+                  var tt = d / bevel
+                  var profile = 1 - (3 * tt * tt - 2 * tt * tt * tt)
+                  var dxEnc = ox * profile
+                  var dyEnc = oy * profile
+                  R = Math.max(0, Math.min(255, Math.round(128 + 127 * dxEnc)))
+                  B = Math.max(0, Math.min(255, Math.round(128 + 127 * dyEnc)))
+                }
+              }
+
+              data[i] = R
+              data[i + 1] = 128
+              data[i + 2] = B
+              data[i + 3] = 255
+            }
+          }
+
+          ctx.putImageData(img, 0, 0)
+          return canvas.toDataURL('image/png')
         }
 
         var filterSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
         filterSvg.setAttribute('width', '0')
         filterSvg.setAttribute('height', '0')
         filterSvg.style.cssText = 'position:absolute;pointer-events:none;'
+        var mapUrl = buildMap()
         filterSvg.innerHTML =
-          '<defs><filter id="' + filterId + '" color-interpolation-filters="sRGB">' +
-          '<feImage x="0" y="0" width="100%" height="100%" href="' + buildMap() + '" result="map"/>' +
+          '<defs><filter id="' + filterId + '" x="-50%" y="-50%" width="200%" height="200%" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">' +
+          '<feFlood flood-color="rgb(128,128,128)" result="neutral"/>' +
+          '<feImage x="0" y="0" width="' + elW + '" height="' + elH + '" preserveAspectRatio="none" href="' + mapUrl + '" result="mapImg"/>' +
+          '<feComposite in="mapImg" in2="neutral" operator="over" result="map"/>' +
           '<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="' + (opts.scale + chroma.r) + '" result="dR"/>' +
           '<feColorMatrix in="dR" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r"/>' +
           '<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="' + (opts.scale + chroma.g) + '" result="dG"/>' +
