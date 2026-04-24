@@ -1,33 +1,31 @@
 /**
  * Liquid Glass Cursor
  *
- * Replaces the native cursor with a glass arrow that refracts
- * page content through SVG displacement + backdrop-filter.
- * Chromatic aberration splits RGB channels at the edges.
+ * Replaces the native cursor with a glass arrow that refracts the page
+ * beneath it. The displacement map is *shape-aware*: for each pixel inside
+ * the cursor, we encode a vector pointing along the OUTWARD normal of the
+ * nearest edge, scaled by a bevel profile that peaks at the rim and fades
+ * to zero in the flat interior. Fed into feDisplacementMap, this produces
+ * physically-motivated refraction — magnification at the rim, undistorted
+ * view through the center — rather than a global X/Y shear. Three parallel
+ * displacement passes with slightly offset scales split the RGB channels
+ * for chromatic aberration.
  */
 
 export interface LiquidGlassCursorOptions {
-  /** Scale factor (default: 2) */
+  /** Cursor scale factor (default: 2) */
   size?: number
-  /** Displacement intensity (default: -60) */
+  /** Max displacement in px. Positive → magnify at rim. Negative → pinch. (default: 30) */
   scale?: number
-  /** Edge refraction width 0–1 (default: 0.2) */
+  /** Bevel width as fraction of shortest cursor dim, 0–1 (default: 0.3) */
   border?: number
-  /** Center neutral lightness 0–100 (default: 50) */
-  lightness?: number
-  /** Center fill opacity 0–1 (default: 0.9) */
-  alpha?: number
-  /** Edge blur in px (default: 5) */
-  blur?: number
-  /** Output blur (default: 0.5) */
+  /** Output Gaussian blur in px (default: 0.4) */
   outputBlur?: number
-  /** Gradient blend mode (default: "difference") */
-  blend?: string
-  /** Frost tint opacity 0–1 (default: 0.05) */
+  /** Frost tint opacity 0–1 (default: 0.06) */
   frost?: number
   /** Saturation boost (default: 1.2) */
   saturation?: number
-  /** Chromatic aberration {r, g, b} offsets (default: {r:0, g:4, b:8}) */
+  /** Per-channel scale offset for chromatic aberration (default: {r:0, g:2, b:4}) */
   chromatic?: { r?: number; g?: number; b?: number }
   /** Smooth follow 0–1 — lower = more lag (default: 0.15) */
   lerp?: number
@@ -35,16 +33,12 @@ export interface LiquidGlassCursorOptions {
 
 const DEFAULTS: Required<LiquidGlassCursorOptions> = {
   size: 2,
-  scale: -60,
-  border: 0.2,
-  lightness: 50,
-  alpha: 0.9,
-  blur: 5,
-  outputBlur: 0.5,
-  blend: 'difference',
-  frost: 0.05,
+  scale: 30,
+  border: 0.3,
+  outputBlur: 0.4,
+  frost: 0.06,
   saturation: 1.2,
-  chromatic: { r: 0, g: 4, b: 8 },
+  chromatic: { r: 0, g: 2, b: 4 },
   lerp: 0.15,
 }
 
@@ -74,42 +68,135 @@ export function createLiquidGlassCursor(
     .map(([x, y]) => `${((x / CURSOR_W) * 100).toFixed(2)}% ${((y / CURSOR_H) * 100).toFixed(2)}%`)
     .join(', ')
 
-  // Displacement map — colored gradients at edges, neutral center
+  // ------------------------------------------------------------
+  // Displacement map — shape-aware, built from the cursor's SDF.
+  //
+  // For each pixel inside the cursor path:
+  //   • Compute distance `d` to the nearest edge segment.
+  //   • Compute outward unit normal (from pixel → closest edge point).
+  //   • If d < bevel: displacement = outward_normal · profile(d/bevel)
+  //     else: zero (flat interior).
+  //
+  // Encoded as R = 128 + 127·dx, B = 128 + 127·dy, G = 128 (unused).
+  // feDisplacementMap with positive `scale` samples outward → magnify.
+  // ------------------------------------------------------------
   function buildMap(): string {
-    const bx = CURSOR_W * opts.border * 0.5
-    const by = CURSOR_H * opts.border * 0.5
-    const sc = 1 - opts.border
+    const RES = 4                                          // oversample per cursor unit
+    const w = Math.ceil(CURSOR_W * RES)
+    const h = Math.ceil(CURSOR_H * RES)
+    const bevel = opts.border * Math.min(CURSOR_W, CURSOR_H)  // in cursor units
 
-    return `data:image/svg+xml,${encodeURIComponent(
-      `<svg viewBox="0 0 ${CURSOR_W} ${CURSOR_H}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%">
-      <stop offset="0%" stop-color="#000"/>
-      <stop offset="100%" stop-color="red"/>
-    </linearGradient>
-    <linearGradient id="b" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#000"/>
-      <stop offset="100%" stop-color="blue"/>
-    </linearGradient>
-    <clipPath id="c"><path d="${PATH}"/></clipPath>
-  </defs>
-  <rect width="${CURSOR_W}" height="${CURSOR_H}" fill="hsl(0 0% 50%)"/>
-  <g clip-path="url(#c)">
-    <rect width="${CURSOR_W}" height="${CURSOR_H}" fill="url(#r)"/>
-    <rect width="${CURSOR_W}" height="${CURSOR_H}" fill="url(#b)" style="mix-blend-mode:${opts.blend}"/>
-    <path d="${PATH}" transform="translate(${bx},${by}) scale(${sc})"
-      fill="hsl(0 0% ${opts.lightness}% / ${opts.alpha})" style="filter:blur(${opts.blur}px)"/>
-  </g>
-</svg>`)}`
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')!
+    const img = ctx.createImageData(w, h)
+    const data = img.data
+
+    // Precompute each edge segment: [ax, ay, dx, dy, |(dx,dy)|²]
+    const segs: [number, number, number, number, number][] = []
+    for (let i = 0; i < POINTS.length; i++) {
+      const a = POINTS[i]
+      const b = POINTS[(i + 1) % POINTS.length]
+      const dx = b[0] - a[0]
+      const dy = b[1] - a[1]
+      segs.push([a[0], a[1], dx, dy, dx * dx + dy * dy])
+    }
+
+    for (let y = 0; y < h; y++) {
+      const py = (y + 0.5) / RES                           // cursor-unit y
+      for (let x = 0; x < w; x++) {
+        const px = (x + 0.5) / RES                         // cursor-unit x
+        const i = (y * w + x) * 4
+
+        // Ray-casting point-in-polygon (even-odd rule — fine for simple polys)
+        let inside = false
+        for (let j = 0, k = POINTS.length - 1; j < POINTS.length; k = j++) {
+          const xj = POINTS[j][0], yj = POINTS[j][1]
+          const xk = POINTS[k][0], yk = POINTS[k][1]
+          if ((yj > py) !== (yk > py) &&
+              px < ((xk - xj) * (py - yj)) / (yk - yj) + xj) {
+            inside = !inside
+          }
+        }
+
+        let R = 128, B = 128
+
+        if (inside) {
+          // Closest-point on cursor boundary (analytical, per-segment)
+          let minDistSq = Infinity
+          let ncx = 0, ncy = 0
+          for (let idx = 0; idx < segs.length; idx++) {
+            const ax = segs[idx][0], ay = segs[idx][1]
+            const sdx = segs[idx][2], sdy = segs[idx][3], l2 = segs[idx][4]
+            let t = ((px - ax) * sdx + (py - ay) * sdy) / l2
+            if (t < 0) t = 0
+            else if (t > 1) t = 1
+            const cx = ax + t * sdx
+            const cy = ay + t * sdy
+            const qx = px - cx
+            const qy = py - cy
+            const dsq = qx * qx + qy * qy
+            if (dsq < minDistSq) {
+              minDistSq = dsq
+              ncx = cx
+              ncy = cy
+            }
+          }
+          const d = Math.sqrt(minDistSq)
+
+          if (d < bevel && d > 1e-6) {
+            // Outward unit vector: from the pixel TO the nearest edge point.
+            // (Pixel is inside; edge is outward from it — this direction is
+            // perpendicular to the edge, pointing OUT of the shape.)
+            const ox = (ncx - px) / d
+            const oy = (ncy - py) / d
+
+            // Bevel profile: inverted smoothstep.
+            //   profile(0) = 1  (max displacement at the rim)
+            //   profile(1) = 0  (no displacement at inner bevel boundary)
+            //   profile'(0) = profile'(1) = 0  (C¹ continuous at both ends
+            //                                   → no visible seam with interior)
+            const t = d / bevel
+            const profile = 1 - (3 * t * t - 2 * t * t * t)
+
+            const dxEnc = ox * profile
+            const dyEnc = oy * profile
+
+            R = Math.max(0, Math.min(255, Math.round(128 + 127 * dxEnc)))
+            B = Math.max(0, Math.min(255, Math.round(128 + 127 * dyEnc)))
+          }
+        }
+
+        data[i] = R
+        data[i + 1] = 128          // G unused by displacement; kept neutral
+        data[i + 2] = B
+        data[i + 3] = 255
+      }
+    }
+
+    ctx.putImageData(img, 0, 0)
+    return canvas.toDataURL('image/png')
   }
 
-  // SVG filter — 3 displacement passes for RGB channel separation
+  // ------------------------------------------------------------
+  // SVG filter — 3 displacement passes for RGB chromatic aberration.
+  //
+  // The filter region is padded to 200% of the element so displacement
+  // samples from outside the cursor still land on real backdrop pixels.
+  // Inside that padded region, feFlood paints neutral gray (128,128,128)
+  // everywhere, and feImage overlays the cursor-sized displacement map on
+  // top — so anywhere outside the element maps to "no displacement".
+  // ------------------------------------------------------------
+  const mapUrl = buildMap()
   const filterSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   filterSvg.setAttribute('width', '0')
   filterSvg.setAttribute('height', '0')
   filterSvg.style.cssText = 'position:absolute;pointer-events:none;'
-  filterSvg.innerHTML = `<defs><filter id="${filterId}" color-interpolation-filters="sRGB">
-    <feImage x="0" y="0" width="100%" height="100%" href="${buildMap()}" result="map"/>
+  filterSvg.innerHTML = `<defs><filter id="${filterId}" x="-50%" y="-50%" width="200%" height="200%" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feFlood flood-color="rgb(128,128,128)" result="neutral"/>
+    <feImage x="0" y="0" width="${elW}" height="${elH}" preserveAspectRatio="none" href="${mapUrl}" result="mapImg"/>
+    <feComposite in="mapImg" in2="neutral" operator="over" result="map"/>
     <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="${opts.scale + chroma.r!}" result="dR"/>
     <feColorMatrix in="dR" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r"/>
     <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" scale="${opts.scale + chroma.g!}" result="dG"/>

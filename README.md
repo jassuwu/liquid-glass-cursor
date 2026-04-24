@@ -47,19 +47,15 @@ createLiquidGlassCursor()
 ```ts
 createLiquidGlassCursor({
   size: 2,            // scale factor
-  scale: -60,         // displacement intensity
-  border: 0.2,        // edge refraction width 0–1
-  lightness: 50,      // center neutral lightness 0–100
-  alpha: 0.9,         // center fill opacity 0–1
-  blur: 5,            // edge blur in px
-  outputBlur: 0.5,    // output filter blur
-  blend: 'difference',// gradient blend mode
-  frost: 0.05,        // frost tint opacity 0–1
+  scale: 30,          // max displacement in px (+ magnify, − pinch)
+  border: 0.3,        // bevel width as fraction of shortest cursor dim
+  outputBlur: 0.4,    // output filter blur
+  frost: 0.06,        // frost tint opacity 0–1
   saturation: 1.2,    // saturation boost
-  chromatic: {        // RGB channel separation
+  chromatic: {        // per-channel scale offsets for aberration
     r: 0,
-    g: 4,
-    b: 8,
+    g: 2,
+    b: 4,
   },
   lerp: 0.15,         // smooth follow 0–1 (lower = more lag)
 })
@@ -67,10 +63,10 @@ createLiquidGlassCursor({
 
 ## how it works
 
-1. **SVG displacement map** — colored gradients at the cursor edges act as a refraction source
-2. **3-pass RGB split** — each color channel is displaced independently, then recombined with screen blending for chromatic aberration
-3. **backdrop-filter** — the glass element uses `backdrop-filter: url(#filter)` to refract whatever is behind it
-4. **physics motion** — velocity-based tilt with lerp smoothing for natural cursor feel
+1. **Shape-aware displacement map** — for every pixel inside the cursor we compute its signed distance to the nearest edge and the outward unit normal. In the bevel zone (within `border` of the rim) the displacement vector is `outward_normal × smoothstep_profile(d/bevel)`, encoded as `R = 128 + 127·dx`, `B = 128 + 127·dy`. The flat interior stays neutral, so only the rim refracts — the same physics as a thick glass slab with a rounded edge.
+2. **3-pass RGB split** — each color channel is displaced with a slightly different scale, then recombined with screen blending for chromatic aberration along the rim.
+3. **backdrop-filter** — the glass element uses `backdrop-filter: url(#filter)` to refract whatever is behind it. The filter region is padded so displacement can sample real backdrop pixels from beyond the element's bounds.
+4. **physics motion** — velocity-based tilt with lerp smoothing for natural cursor feel.
 
 ## cleanup
 
