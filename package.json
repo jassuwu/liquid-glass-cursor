@@ -1,6 +1,6 @@
 {
   "name": "liquid-glass-cursor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Replace your cursor with a liquid glass prism that refracts page content",
   "module": "dist/index.js",
   "main": "dist/index.js",
